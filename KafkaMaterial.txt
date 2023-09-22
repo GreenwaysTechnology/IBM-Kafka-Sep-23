@@ -594,6 +594,8 @@ Step 2:
 
 in order to start kafka broker we need to supply server.properties file...
 
+./bin/kafka-server-start.sh config/server.properties
+
 broker.id=0
    Each broker is idenfitified uniquely in the cluster.
 
@@ -1161,20 +1163,344 @@ how things are
 How kafka transfers messages
 How kafka uses messages/events
 Streams
+.....................................................................................
+			 Consumer Properties - TimeStamp
+.....................................................................................
+
+TimeStamp Property says that when event was published - Time of Event published
+
+./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic todos-topic --from-beginning --property print.timestamp=true
+CreateTime:1695295407429        Learn Kafka
+CreateTime:1695295431899        Learn Event Driven arch
+CreateTime:1695295448563        Learn Kafka Streams
+CreateTime:1695296617270        Hello
+CreateTime:1695296641027        How are you
+CreateTime:1695296645434        how things are
+CreateTime:1695296652725        How kafka transfers messages
+CreateTime:1695296661746        How kafka uses messages/events
+CreateTime:1695296890093        Streams
+.....................................................................................
+			   Topic Configuration-Log Rention
+.....................................................................................
+
+By Default , events (messages) are stored into Topics, topic finally persists into log file.
+
+Can delete Events from the log file?
+By default, No, Kafka log messages(events,Records) are immutable - read only. -
+
+Can i delete log files?
+  yes you can delete log file.
+
+Deleting the logs which is called "Log Rention/Log Rention Policy"
+
+Log Clean up Policies?
+ 
+ In kafka , Unlike other messaging brokers, the messages/events on a topic are not immediately removed after they are consumed. Instead, the configurtion of each topic determines how much space the topic is permitted and how it is managed.
+
+Concept of making data expire is called as "Clean Up". It is a topic level configuration.
+
+Types of clean up policies:
+...........................
+		
+			 Log Clean Up policies
+				|
+    -----------------------------------------------------
+    |                    |             |
+ 
+  DELETE              Compact         Compact and Delete
 
 
 
+Delete Policy:
+   It is default cleanup policy.This will discard old "segment".
+
+.....................................................................................
+		  "Over all Kafka is configuration based"
+
+Based on configuration we can change the overall the behaviour of kafka either during start up or while running.
+
+Types of configuration:
+1.Static configuration
+    Before starting kafka broker , configurations are set
+2.Dynamic configuration
+   After starting Kafka broker, configurations are passed while kafka broker in production.
+
+Any Configuration can be setup in two levels
+
+1.Broker level
+   Setting up configurations for whole broker 
+2.topic level
+   You can setup configuration for particular topic, that configuration will not affect other configuratoin
+
+Log Rention Policies can be setup via configuration either statically or dynmaically
+
+Log Rention policies configuration can be setup "Broker level" or "Topic level"
+
+if you set policy at broker level, which is applied to all topics which are created inside broker.
 
 
+Log Rention Policy can be setup in two ways
+
+1.Time Based 
+2.Size based
+
+1.Time Based: Period of Time
+  I want to delete log files after 7 days, 7 months,7 weeks,7 years,7 mins, 7 secs ,7 mins
+
+2.Size based
+ I want to delete log files after certain size reached, for after reaching 1GB 
+ The value must be postive no
+ if you set -1, meaning that no limit on size.
+
+Can i set both policies togther?
+
+Yes, Which policy wins first, based on that policy, the log files will be deleted.
 
 
+Time Based Configuration: Broker Level:
+
+server.properties:
+  This file contains all configurations related to broker
+
+log.retention.hours
+
+The number of hours to keep a log file before deleting it (in hours), tertiary to log.retention.ms property
+
+Type:	int
+Default:	168  - 7 days -  1 week
+Valid Values:	
+Importance:	high
+Update Mode:	read-only
+
+log.retention.minutes
+
+The number of minutes to keep a log file before deleting it (in minutes), secondary to log.retention.ms property. If not set, the value in log.retention.hours is used
+
+Type:	int
+Default:	null
+Valid Values:	
+Importance:	high
+Update Mode:	read-only
+
+log.retention.ms
+The number of milliseconds to keep a log file before deleting it (in milliseconds), If not set, the value in log.retention.minutes is used. If set to -1, no time limit is applied.
+
+Type:	long
+Default:	null
+Valid Values:	
+Importance:	high
+Update Mode:	cluster-wide
+
+Size Based Configuration:
+........................
+
+log.retention.bytes
+
+The maximum size of the log before deleting it
+
+Type:	long
+Default:	-1
+Valid Values:	
+Importance:	high
+Update Mode:	cluster-wide
+
+log.retention.bytes=1073741824
+
+When ever it reaches 1GB, log file will be deleted.
+.....................................................................................
+			 Topic Level Configuration
+.....................................................................................
+
+While creating a topic or after creating a topic we can set configuration related to Log rention policy.
 
 
+--config <String: name=value>            A topic configuration override for the
+                                           topic being created or altered. The
+                                           following is a list of valid
+                                           configurations:
+                                                cleanup.policy
+                                                compression.type
+                                                delete.retention.ms
+                                                file.delete.delay.ms
+                                                flush.messages
+                                                flush.ms
+                                                follower.replication.throttled.
+                                           replicas
+                                                index.interval.bytes
+                                                leader.replication.throttled.replicas
+                                                local.retention.bytes
+                                                local.retention.ms
+                                                max.compaction.lag.ms
+                                                max.message.bytes
+                                                message.downconversion.enable
+                                                message.format.version
+                                                message.timestamp.difference.max.ms
+                                                message.timestamp.type
+                                                min.cleanable.dirty.ratio
+                                                min.compaction.lag.ms
+                                                min.insync.replicas
+                                                preallocate
+                                                remote.storage.enable
+                                                retention.bytes
+                                                retention.ms
+                                                segment.bytes
+                                                segment.index.bytes
+                                                segment.jitter.ms
+                                                segment.ms
+                                                unclean.leader.election.enable
+                                         See the Kafka documentation for full
+                                           details on the topic configs. It is
+                                           supported only in combination with --
+                                           create if --bootstrap-server option
+                                           is used (the kafka-configs CLI
+                                           supports altering topic configs with
+                                           a --bootstrap-server option).
 
 
+Interval Property:
+  The interval at which log segments are checked to see if they can be deleted according  to the retention policies.
+
+log.retention.check.interval.ms=300000
 
 
+.....................................................................................
 
+Lab:
+
+Steps:
+1.Stop any running server
+2.Open server.properties and change configurations
+  log.retention.minutes=1
+3.Start Kafka broker 
+   Test after 1 min, and check along with
+
+server log:
+[2023-09-22 15:33:22,001] INFO [LocalLog partition=todos-topic-0, dir=/tmp/kafka-logs] Deleting segment files LogSegment(baseOffset=0, size=761, lastModifiedTime=1695296891088, largestRecordTimestamp=Some(1695296890093)) (kafka.log.LocalLog$)
+[2023-09-22 15:33:22,003] INFO Deleted log /tmp/kafka-logs/todos-topic-0/00000000000000000000.log.deleted. (kafka.log.LogSegment)
+[2023-09-22 15:33:22,006] INFO Deleted offset index /tmp/kafka-logs/todos-topic-0/00000000000000000000.index.deleted. (kafka.log.LogSegment)
+[2023-09-22 15:33:22,006] INFO Deleted time index /tmp/kafka-logs/todos-topic-0/00000000000000000000.timeindex.deleted. (kafka.log.LogSegment)
+[2023-09-22 15:33:22,011] INFO [LocalLog partition=demo-topic-0, dir=/tmp/kafka-logs] Deleting segment files LogSegment(baseOffset=0, size=253, lastModifiedTime=1695295936788, largestRecordTimestamp=Some(1695295935795)) (kafka.log.LocalLog$)
+[2023-09-22 15:33:22,013] INFO Deleted log /tmp/kafka-logs/demo-topic-0/00000000000000000000.log.deleted. (kafka.log.LogSegment)
+[2023-09-22 15:33:22,014] INFO Deleted offset index /tmp/kafka-logs/demo-topic-0/00000000000000000000.index.deleted. (kafka.log.LogSegment)
+[2023-09-22 15:33:22,015] INFO Deleted time index /tmp/kafka-logs/demo-topic-0/00000000000000000000.timeindex.deleted. (kafka.log.LogSegment)
+...................................................................................
+
+Lab:
+ Create topic with Rentension policy 
+
+Steps:
+1.create a topic with Retension policy
+
+./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic demo-topic --config retention.ms=10000
+
+Created topic hello-topic.
+
+2.Produce some events
+./bin/kafka-console-producer.sh -bootstrap-server localhost:9092 --topic hello-topic
+
+3.consume events
+/bin/kafka-console-consumer.sh -bootstrap-server localhost:9092 --topic hello-topic --from-beginning --property print.timestamp=true
+
+Wait for 2 mins and check the messages again. You can notice that messages have been deleted(log file)
+
+Lab:
+ Based on Size 
+
+log.retention.bytes=1073741824
+
+You can enable this property some seetings like 1 kb
+
+Steps: after enabling , restart the server and produce message until it reaches 1 kb once it reaches i kb you can note down that file would have been deleted.
+....................................................................................
+			  Dynamic Configuration
+....................................................................................
+
+kafka-configs.sh -To manage Runtime Configuration
+  This tool helps to 
+/bin/kafka-configs.sh --help
+This tool helps to manipulate and describe entity config for a topic, client, user, broker or ip
+Option                                 Description
+------                                 -----------
+--add-config <String>                  Key Value pairs of configs to add.
+                                         Square brackets can be used to group
+                                         values which contain commas: 'k1=v1,
+                                         k2=[v1,v2,v2],k3=v3'. The following
+                                         is a list of valid configurations:
+                                         For entity-type 'topics':
+                                        cleanup.policy
+                                        compression.type
+                                        delete.retention.ms
+                                        file.delete.delay.ms
+                                        flush.messages
+                                        flush.ms
+                                        follower.replication.throttled.
+                                         replicas
+                                        index.interval.bytes
+                                        leader.replication.throttled.replicas
+                                        local.retention.bytes
+                                        local.retention.ms
+                                        max.compaction.lag.ms
+                                        max.message.bytes
+                                        message.downconversion.enable
+                                        message.format.version
+....................................................................................
+
+//Adding new config or editing existing configuration broker level setting.
+
+Enity Types:
+--entity-type <String>                 Type of entity
+                                         (topics/clients/users/brokers/broker-
+                                         loggers/ips)
+
+
+./bin/kafka-configs.sh  --bootstrap-server localhost:9092 --alter --entity-type brokers --entity-default --add-config min.insync.replicas=2
+
+
+ Here you are adding new configuration called "min.insync.replicas=2" to the existing broker configuration and mean time we have to keep existing configurations too.
+
+If you are in client side ,like java programs
+
+KafkaConfig myconfig=new KafkaConfig()
+myconfig.setProperty("min.insync.replicas",2)
+
+if you want delete existing configuration
+
+./bin/kafka-configs.sh  --bootstrap-server localhost:9092 --alter --entity-type brokers --entity-default --delete-config min.insync.replicas
+
+Topics Dynamic Configuration:
+
+./bin/kafka-configs.sh --bootstrap-server localhost:9092 --alter --entity-type topics 
+ --entity-default --entity-name configured-topic --add-config max.message.bytes=10232323
+
+
+Lab:
+Steps
+1.create a new topic with default settings
+./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic payment-topic
+Created topic payment-topic.
+2.Alter topic configuration like log rentention policy
+/bin/kafka-configs.sh --bootstrap-server localhost:9092 --alter --entity-type topics --entity-name payment-topic --add-config retention.ms=10000
+Completed updating config for topic payment-topic.
+3.Describe the topic
+/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic payment-topic
+Topic: payment-topic    TopicId: ig7CcFjkQbKA7L1YiakRdQ PartitionCount: 1       ReplicationFactor: 1    Configs: retention.ms=10000,retention.bytes=1073741824
+        Topic: payment-topic    Partition: 0    Leader: 0       Replicas: 0     Isr: 0
+3.Produce message 
+./bin/kafka-console-producer.sh -bootstrap-server localhost:9092 --topic payment-topic
+>100 credited
+>2000 debited
+>3000 credited
+>4000 debited
+4.After producing some events , you can test whether log retention policy is applied 
+
+Server log
+
+[2023-09-22 17:22:29,746] INFO Deleted log /tmp/kafka-logs/payment-topic-0/00000000000000000000.log.deleted. (kafka.log.LogSegment)
+[2023-09-22 17:22:29,747] INFO Deleted offset index /tmp/kafka-logs/payment-topic-0/00000000000000000000.index.deleted. (kafka.log.LogSegment)
+[2023-09-22 17:22:29,747] INFO Deleted time index /tmp/kafka-logs/payment-topic-0/00000000000000000000.timeindex.deleted. (kafka.log.LogSegment)
+.....................................................................................
+			 Partition
+....................................................................................
 
 
 
