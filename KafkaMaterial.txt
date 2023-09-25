@@ -1499,10 +1499,504 @@ Server log
 [2023-09-22 17:22:29,747] INFO Deleted offset index /tmp/kafka-logs/payment-topic-0/00000000000000000000.index.deleted. (kafka.log.LogSegment)
 [2023-09-22 17:22:29,747] INFO Deleted time index /tmp/kafka-logs/payment-topic-0/00000000000000000000.timeindex.deleted. (kafka.log.LogSegment)
 .....................................................................................
-			 Partition
+			       Partition
+....................................................................................
+What is Partition?
+  In order to distribute the "storage and Process of Events" in a topic, Kafka uses the concept called "Partition"
+
+The topic is broken into multiple partitions.
+
+Every partition is just folder
+
+Every Partition can have its own log files.
+
+			Payment-topic
+			   |
+		----------------------------------------------
+                |           |              |
+         payment-topic-0  payment-topic-1 payment-topic-2 - folder
+            |                    |            |
+          log files          log files      logfiles  ----disk files
+
+By default every topic has only one partition.
+
+How to create multiple partitions?
+
+./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic payment-topic --partitions 3
+
+After supplying partition option you can see inside kafka-log folder
+
+/tmp/kafka-logs
+    |
+    payment-topic-0
+    payment-topic-1
+    payment-topic-2
+
+./bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic payment-topic 
+
+./bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic payment-topic
+Topic: payment-topic    TopicId: e7BoE8GFTcaxsskWMyI6OA PartitionCount: 3       ReplicationFactor: 1    Configs: retention.bytes=1073741824
+        Topic: payment-topic    Partition: 0    Leader: 0       Replicas: 0     Isr: 0
+        Topic: payment-topic    Partition: 1    Leader: 0       Replicas: 0     Isr: 0
+        Topic: payment-topic    Partition: 2    Leader: 0       Replicas: 0     Isr: 0
+
+Why Partitions?
+ =>Partitions helps to distribute messages into multiple log files so that we dont need to dump into one single log file, we can scale the events across multiple files.
+ =>Partitions are helping unit of parallelism.
+
+.....................................................................................				  Segements
 ....................................................................................
 
+What is segment?
+  Segment is just actual log files containings "Records"
 
+Topics are broken into partitions, and partitions are broken into segements.
+
+Semgment means "log files"
+
+How to list log files?
+
+/tmp/kafka-logs/payment-topic-0$ ls -l
+total 8
+-rw-r--r-- 1 subu subu 10485760 Sep 25 14:33 00000000000000000000.index
+-rw-r--r-- 1 subu subu        0 Sep 25 14:33 00000000000000000000.log
+-rw-r--r-- 1 subu subu 10485756 Sep 25 14:33 00000000000000000000.timeindex
+-rw-r--r-- 1 subu subu        8 Sep 25 14:33 leader-epoch-checkpoint
+-rw-r--r-- 1 subu subu       43 Sep 25 14:33 partition.metadata
+
+Here segement is group of files
+.log
+.index
+.timeindex
+
+00000000000000000000 -  Name of file.
+
+Segment is just log file Which contains "Actual Records".
+
+What is Record?
+  Record is representation of "Event".
+  Record is nothing but "Message"
+
+Records are stored as "Byte Array"
+
+00000000000000000000.log actuall stores "Records"
+...................................................................................
+			Segment File or Log File Architecture
+....................................................................................
+
+How events or data or message or record is stored segement?
+
+
+Actual Log file is structured with two parts
+
+1.Actual data-event
+2.offset
+
+As we discussed data/event is published into segement as "Record" which is simply byte array.
+
+Offset:
+An offset into a file is simply the character location within that file, usually starting with 0; thus "offset 240" is actually the 241st byte in the file.
+
+  (Byte Array)
+  a  b  c  d   e  f  g           Actual Record
+.........................................
+  0  1  2  3   4  5  6           Offset
+
+
+When ever you publish event into topic, into partition and into segement event to be inserted along with offset no.
+
+A Partition can have multiple segments meaning that i can have multiple log files.
+
+Multiple log files inside single folder(Partition)
+
+File Names
+
+partion-0
+  00000000000000000000.log  -Segement-0
+  00000000000000000001.log  -Segement-1
+  00000000000000000002.log  -Segement-2
+
+Since We have multiple segement files inside a particular partitions. when we send message into that partition in which segement message will be inserted?
+
+                 "Only Active Segement can receive Message"
+
+How many segements a partitions can have?
+ There is no limit no of "segement files"
+
+When a Segement files are created?
+   
+   Segement files are created based on two conditions
+
+1.Size
+2.Time
+
+The segement size(file size) is determined by the property
+
+log.segement.bytes
+   The maximum size of a single log file.
+   When it reaches, kafka will create new one
+   default is 1 gb
+
+Time:
+ log.segement.ms
+   The Kafka will wait before creating new file based on time
+  default is 1 week
+
+
+How to represent multiple segement files and how messages are published into active segement?
+
+Segement-0       Segement-1           Segement-2         
+Offset 0 to 957  Offset 958 to 1500   Offset 1501 ---? <===writes
+.....................................................................................
+
+Lab: Mutliple segements
+ In order to create new log files
+
+server.properties
+# The maximum size of a log segment file. When this size is reached a new log segment will be created.
+#log.segment.bytes=1073741824
+
+Steps:
+1.Start Kakfa Server
+2.create topic with single partitions (Only for testing, you can have more partitions)
+3.Keep on publishing messages until it reaches 1000 bytes
+4.Look into the log locations of /tmp/kafka-logs
+
+/tmp/kafka-logs/todos-topic-0$ ls -l
+total 24
+-rw-r--r-- 1 subu subu        0 Sep 25 15:34 00000000000000000000.index
+-rw-r--r-- 1 subu subu      986 Sep 25 15:34 00000000000000000000.log
+-rw-r--r-- 1 subu subu       12 Sep 25 15:34 00000000000000000000.timeindex
+-rw-r--r-- 1 subu subu 10485760 Sep 25 15:34 00000000000000000014.index
+-rw-r--r-- 1 subu subu      784 Sep 25 15:34 00000000000000000014.log
+-rw-r--r-- 1 subu subu       56 Sep 25 15:34 00000000000000000014.snapshot
+-rw-r--r-- 1 subu subu 10485756 Sep 25 15:34 00000000000000000014.timeindex
+-rw-r--r-- 1 subu subu        8 Sep 25 15:32 leader-epoch-checkpoint
+-rw-r--r-- 1 subu subu       43 Sep 25 15:32 partition.metadata
+....................................................................................
+		                 Consumers
+...................................................................................
+
+Consumers can read Records from the "segment" based on "Offset only"
+
+Consumers read Records
+
+1.from beginining  - from the 0th offset
+2.from the active  postion - from the current offset.
+3.based on offset.
+
+Note: if you read record based on offset , you must supply partition option.
+
+ ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic todos-topic --offset 2 --partition 0
+adfasfsaf
+adfafadsfsaf
+adfasfsadfasfd
+dsafdsafdsafsadfdsafdsfsafdsafsadf
+adfadfdsafdsafdsafdsafdsafdsafsadfdsfsadfsafsafsaf
+adsfsafsafsdfsafsdfsadfasdfdsafadfafd
+adfafsadf
+
+fdfadf
+adfsafd
+adfasdfas
+adsfsafsaf
+adfafdasdf
+adfadfadf
+adfadfsafd
+adfsfdasf
+sgfsgsfg
+sfsfgsdgf
+sgsfgfdsg
+sfsgdsfgsfdgfdsg
+sgfsfgsgdsfg
+sfgsgsgsfgsf
+^CProcessed a total of 22 messages
+subu@LAPTOP-R2TGGFDL:~/kafka_2.13-3.5.1$ ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic todos-topic --offset 0 --partition 0
+adsfasdf
+adfasfasf
+adfasfsaf
+adfafadsfsaf
+adfasfsadfasfd
+dsafdsafdsafsadfdsafdsfsafdsafsadf
+adfadfdsafdsafdsafdsafdsafdsafsadfdsfsadfsafsafsaf
+adsfsafsafsdfsafsdfsadfasdfdsafadfafd
+adfafsadf
+
+fdfadf
+adfsafd
+adfasdfas
+adsfsafsaf
+adfafdasdf
+adfadfadf
+adfadfsafd
+adfsfdasf
+sgfsgsfg
+sfsfgsdgf
+sgsfgfdsg
+sfsgdsfgsfdgfdsg
+sgfsfgsgdsfg
+sfgsgsgsfgsf
+^CProcessed a total of 24 messages
+subu@LAPTOP-R2TGGFDL:~/kafka_2.13-3.5.1$ ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic todos-topic --offset 10 --partition 0
+fdfadf
+adfsafd
+adfasdfas
+adsfsafsaf
+adfafdasdf
+adfadfadf
+adfadfsafd
+adfsfdasf
+sgfsgsfg
+sfsfgsdgf
+sgsfgfdsg
+sfsgdsfgsfdgfdsg
+sgfsfgsgdsfg
+sfgsgsgsfgsf
+^CProcessed a total of 14 messages
+subu@LAPTOP-R2TGGFDL:~/kafka_2.13-3.5.1$
+.....................................................................................
+		 How to inspect the internals of log file
+			(Dump log)
+.....................................................................................
+
+Some times when y are working with Kafka , you may find yourself needing to manually inspect underlying logs of a topic.
+
+Whether you are just curious about Kafka internals or you need to debug an issue and verifthe content , the kafka-dump-log command is your friend.
+
+kafka-dump-log.sh
+
+Lab:
+ Verify the internal of "Segement" file
+
+/kafka_2.13-3.5.1$ ./bin/kafka-dump-log.sh --print-data-log --files /../tmp/kafka-logs/todos-topic-0/00000000000000000000.log
+
+Dumping /../tmp/kafka-logs/todos-topic-0/00000000000000000000.log
+Log starting offset: 0
+baseOffset: 0 lastOffset: 1 count: 2 baseSequence: 0 lastSequence: 1 producerId: 0 producerEpoch: 0 partitionLeaderEpoch: 0 isTransactional: false isControl: false deleteHorizonMs: OptionalLong.empty position: 0 CreateTime: 1695636244548 size: 93 magic: 2 compresscodec: none crc: 3980279278 isvalid: true
+| offset: 0 CreateTime: 1695636243571 keySize: -1 valueSize: 8 sequence: 0 headerKeys: [] payload: adsfasdf
+| offset: 1 CreateTime: 1695636244548 keySize: -1 valueSize: 9 sequence: 1 headerKeys: [] payload: adfasfasf
+....................................................................................
+			 Index files
+.....................................................................................
+
+.index
+  Contains the mappings of "offset" to its position in ".log" file.
+.timeindex
+  file contains the mappings of "Timestamp" to message offset.
+
+Messages(events) are searched by consumer based these index files only....
+
+			 Topic
+			  |
+		..............................................
+		|          |           |
+	   partition-0   partition-1  partition-2
+	     |
+	  0000000000.log
+            offset  0 1 2 3...
+	    byte    a b c d .....
+            |
+         000000.index
+          offset 0  1    2    3  ...
+          byte   23 223  400  800
+         000000.timeindex
+          timestamp 2323232323    23232321212     23232323	
+	  offsets       0            1             2            
+...................................................................................
+		Records(Events/Messages) Distributions and Partitions
+...................................................................................
+
+Topics are broken into partitions, partitions are brokents into segements
+
+As a Producer, we send data to the Topic only, Topic only distributes messages among Partitions.
+
+Partitioner:
+............
+   Partitioner is a process/alogorthim that will determine to which partition a sepcific message/record/event will be assigned
+
+    "In Nutshell Partitioner is simple java Program/class having Routing 
+     Algorthim"
+            "That algorthim only decides where to go"
+
+For eg I have a topic having 3 partition
+  Record===>Publish====>Partitioner===> Where to go==> P0 OR P1 OR P2
+
+Record contains information for how to select Partition.
+
+Partitioner Algorthims:
+......................
+1.Round Robin Algorthim
+2.Stick Partitioner Algorthim
+3.Key Based Partitioner Alogorthim.
+
+1.Round Robin Alogrthim.
+  It is default Algorthim used in kafka olders versions less than 2.3
+  lets i assume i have two partitions
+  M1 ----> P1
+  M2-----> P2
+  M3------>P1
+  M4 ----->P2
+
+In Round robin messages are distributed equally to all partitions.
+
+Drawbacks of Round Robin Algorthim:
+
+1.if more messages and more partitions, there is possibility of higher latency and low performance.
+
+2.Stick Partitioner Algorthim
+
+ It is built on the top of Round Robin only.
+ Sticky Partitioner wont send "a" single event/record rather it sends as a batch
+ It improves the Performance,reduces network latency.
+ This is default Partitioner in the lastest kafka.
+
+Stick Partitioner = {Round Robin + Batching}
+
+3.Key Based Partitioner:
+........................
+
+ In Kafka "Message/Event/Record" has Basic Structure is that "Records are organized or represented  as Key-Value" Pair.
+
+Every Record must be organized as key value pair, but as of now we have not mentioned any where with key, then how to get keys.
+
+Lab:
+  How to print key of a record.
+
+./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic todos-topic --offset 0  --partition 0 --property print.key=true
+null    adsfasdf
+null    adfasfasf
+null    adfasfsaf
+null    adfafadsfsaf
+null    adfasfsadfasfd
+null    dsafdsafdsafsadfdsafdsfsafdsafsadf
+null    adfadfdsafdsafdsafdsafdsafdsafsadfdsfsadfsafsafsaf
+null    adsfsafsafsdfsafsdfsadfasdfdsafadfafd
+null    adfafsadf
+null
+null    fdfadf
+null    adfsafd
+null    adfasdfas
+null    adsfsafsaf
+null    adfafdasdf
+null    adfadfadf
+null    adfadfsafd
+null    adfsfdasf
+null    sgfsgsfg
+null    sfsfgsdgf
+null    sgsfgfdsg
+null    sfsgdsfgsfdgfdsg
+null    sgfsfgsgdsfg
+null    sfgsgsgsfgsf
+
+
+Here "null" is Key "sfgsgsgsfgsf" is value
+
+By default every message has "null" key
+
+	"If you produce record/message/event without key means with null key"
+
+        "If Record has null key, Kafka selects  Sticky Partitioner by default"
+....................................................................................
+
+Key based on Distribution:
+..........................
+
+Lab:
+1.create topic with 2 partitions
+2.Publish message with explicit Key
+3.Consume message
+
+Publish Message with Key:
+
+--property "parse.key=true" --property "key-separator=:"
+
+Steps:
+1. ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic products-topic --partitions 2
+
+2../bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic products-topic --property "parse.key=true" --property "key.separator=:"
+>id:1
+>name:Subramaian
+>id:2
+>name:Ram
+>id:1
+>name:Karthik
+>hello
+org.apache.kafka.common.KafkaException: No key separator found on line number 7: 'hello'
+        at kafka.tools.ConsoleProducer$LineMessageReader.kafka$tools$ConsoleProducer$LineMessageReader$$parse(ConsoleProducer.scala:437)
+        at kafka.tools.ConsoleProducer$LineMessageReader$$anon$3.hasNext(ConsoleProducer.scala:407)
+        at kafka.tools.ConsoleProducer$.loopReader(ConsoleProducer.scala:90)
+        at kafka.tools.ConsoleProducer$.main(ConsoleProducer.scala:99)
+        at kafka.tools.ConsoleProducer.main(ConsoleProducer.scala)
+
+Note : if you insert any record without key, it will throw error.
+
+3. ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic products-topic --property print.key=true --property  print.value=true --property print.partition=true --from-beginning
+
+Partition:1     id      1
+Partition:0     name    Subramaian
+Partition:1     id      2
+Partition:0     name    Ram
+Partition:1     id      1
+Partition:0     name    Karthik
+Partition:1     hello   test
+
+How key distribution is happening internally?
+
+In old Kafka , they used "round Robin"
+
+Kafka later introduced  an alogorthim called 'key' - 'Key hashing Algorthim'
+
+Key hashing alogrthim uses the process of determining the mapping of a key to a parttion in the default partitioner.
+The keys are hashed based on alogrthim called "murmur2"
+
+  Target Partition = Math.abs(Util.murmur2(keyInBytes) % (numOfPartions-1)
+
+Note:
+ if you have same key,but different values, the same Partition will be used.
+..................................................................................
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+			
 
 
 
