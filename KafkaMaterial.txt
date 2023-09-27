@@ -1954,24 +1954,432 @@ The keys are hashed based on alogrthim called "murmur2"
 Note:
  if you have same key,but different values, the same Partition will be used.
 ..................................................................................
+			 Replication
+..................................................................................
+
+How to enable replication?
+  We can enable replication at topic level. when a new topic is created we can specifiy exactly or through default, how many replicas we want.
+
+Lab:
+Start All servers
+
+./bin/zookeeper-server-start.sh config/zookeeper.properties
+ ./bin/kafka-server-start.sh config/server.properties
+
+create topic with replication factor:
+ --replication-factor number
 
 
+/bin/kafka-topics.sh --bootstrap-server localhost:9092 --topic product-topic --create --partitions 2 --replication-factor 3
+
+Error while executing topic command : Replication factor: 3 larger than available brokers: 1.
+[2023-09-27 15:01:49,692] ERROR org.apache.kafka.common.errors.InvalidReplicationFactorException: Replication factor: 3 larger than available brokers: 1.
+ (kafka.admin.TopicCommand$)
+
+Why we are getting this error?
+  Because we are asking topic to be replicated into 3 servers but we have only one server is running.
+
+Before setting up replicas, we are going to use "Kraft"
+.....................................................................................
+			KRaft Mode
+.....................................................................................	
+In KRaft Mode, we dont need zookeeper.
+
+Types of Brokers
+
+1.Controller 
+    It is broker Which manages meta data management,leader election,notification to other brokers
+2.Broker
+   It is holding data plane - Getting request from producer,and consumer, replication
+
+3.Controller  and Broker  
+   It can act as controller and broker
+		
+Lab:
+   Single kafka broker with Single Controller, same server is going to act as broker and controller
+
+Configuration:
+ inside config folder there is folder called "KRaft"
+
+kafka Distribution provides template configuration properties 
+
+config/kraft/
+  broker.properties  --> You can use this file to start as "broker-data plane"
+  controller.properties - You can use this file to start as "controller-Control plane"
+  server.properties - You can use this file to start "both broker and controller"
+ 
+
+Steps:
+1.Generate a Cluster ID (note : This is step needed for KRaft Mode)
+
+ Before generating cluster id, we need to know, how to use Kafka-storage.sh utility
+
+./bin/kafka-storage.sh --help
+usage: kafka-storage [-h] {info,format,random-uuid} ...
+
+The Kafka storage tool.
+
+positional arguments:
+  {info,format,random-uuid}
+    info                 Get information about the Kafka log directories on this node.
+    format               Format the Kafka log directories on this node.
+    random-uuid          Print a random UUID.
+
+optional arguments:
+  -h, --help             show this help message and exit
 
 
+1.Cluster ID declaration:
+
+KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
+echo $KAFKA_CLUSTER_ID
+z5BC8G9GSjinmRy27PS1FQ
+
+2.Format log directories using cluster id
+./bin/kafka-storage.sh format -t  $KAFKA_CLUSTER_ID -c config/kraft/server.properties
+
+Formatting /tmp/kraft-combined-logs with metadata.version 3.5-IV2.
+
+3.Start Server In KRaft mode
+./bin/kafka-server-start.sh config/kraft/server.properties
+
+4.Create Simple topic and test
+./bin/kafka-topics.sh --create --topic todos-topic --bootstrap-server localhost:9092
+
+Created topic todos-topic.
+
+5.Describing
+./bin/kafka-topics.sh --describe --topic todos-topic --bootstrap-server localhost:90
+92
+
+Topic: todos-topic    TopicId: iLRR7RdYSgy-kWYK1Z48uQ PartitionCount: 1       ReplicationFactor: 1    Configs: segment.bytes=1073741824
+Topic: todos-topic      Partition: 0    Leader: 1       Replicas: 1     Isr: 1
+....................................................................................
+			  Multi node setup with Replication
+.....................................................................................
+
+Steps:
+
+1.Just Explore config files
+
+config/kraft/
+  broker.properties  --> You can use this file to start as "broker-data plane"
+  controller.properties - You can use this file to start as "controller-Control   plane"
+  server.properties - You can use this file to start "both broker and controller"
+ 
+broker.properties =  only Broker-Data plane
+controller.properties - Only Controll Plane
+server.properties - Both Data plan + Control Plan
+
+Exploring Config properties:
+............................
+broker.properties
+
+############################# Server Basics #############################
+# The role of this server. Setting this puts us in KRaft mode
+process.roles=broker
 
 
+controller.properties
+
+############################# Server Basics #############################
+# The role of this server. Setting this puts us in KRaft mode
+process.roles=controller
+
+server.properties
+
+############################# Server Basics #############################
+
+# The role of this server. Setting this puts us in KRaft mode
+process.roles=broker,controller
+
+KRaft Mode:
+
+ ./bin/kafka-server.sh  config/kraft/broker.properties
+ ./bin/kafka-server.sh  config/kraft/controller.properties
+ ./bin/kafka-server.sh  config/kraft/server.properties
+
+Zookeeper Mode:
+  
+ ./bin/kafka-server.sh  config/server.properties
+
+.....................................................................................
+			 Multi node Architecture
+....................................................................................
+
+We need to start Kafka brokers, How each brokers are identified?
+ Using Broker id / node id
+node.id=1 node.id=2 node.id=3 node.id=3
+..................................................................................
+			 Controller Configuration
+.................................................................................
+
+You can configure list of controllers in the cluster
+
+controller.quorum.voters=1@localhost:9093
+
+This configuration is for identifying other controllers in the cluster.
+
+Here 
+  "1" - is node Id => This node one is controller
+  "localhost" - is host nme of the controller
+  "9093" is port on the which controller is running.
+
+Let us say i have three nodes
+
+node-1
+node-2
+node-3
+
+node-1 is designated as broker
+node-2 is desginated as controller
+node-3 is desginated as controller
+
+node-1
+ process.roles=broker
+ node.id=1
+
+node-2
+ process.roles=controller
+ node.id=2
+ controller.quorum.voters=2@localhost:9092,3@localhost:9093
 
 
+node-3
+ process.roles=controller
+ node.id=3
+ controller.quorum.voters=2@localhost:9092,3@localhost:9093
+.....................................................................................
+
+Both Controller and Broker 
+
+node-1
+node-2
+node-3
+
+node-1 is designated as broker and controller
+node-2 is desginated as controller and broker
+node-3 is desginated as controller and broker
+
+node-1
+ process.roles=broker,controller
+ node.id=1
+ controller.quorum.voters=1@localhost:9091,2@localhost:9092,3@localhost:9093
+
+node-2
+ process.roles=controller,broker
+ node.id=2
+ controller.quorum.voters=1@localhost:9091,2@localhost:9092,3@localhost:9093
 
 
+node-3
+ process.roles=controller,broker
+ node.id=3
+ controller.quorum.voters=1@localhost:9091,2@localhost:9092,3@localhost:9093
+.......................................................................
+			Socket Server Settings
+............................................................................
+
+broker.properties
+
+listeners = listener_name://host_name:port
+
+This syntax is specific to URI scheme(rule) syntax  
+eg:         
+http://localhost:8080
+ws://lococalhost:8080
+jdbc:mysql://localhost:3306
+
+      listener_name://host_name:port
+	  |
+       protocal://host_name:port
+
+listeners=PLAINTEXT://localhost:9092
+
+Types of Kafka Protocals:
+........................
+
+1.PLAINTEXT
+	This is protocal used for brokers communications
+
+# Name of listener used for communication between brokers.
+inter.broker.listener.name=PLAINTEXT
+
+2.CONTROLLER 
+   This is protocal used for controller communication.
+
+# A comma-separated list of the names of the listeners used by the controller.
+# This is required if running in KRaft mode. On a node with `process.roles=broker`, only the first listed listener will be used by the broker.
+controller.listener.names=CONTROLLER
+..................................................................................
+
+Protocal Configurations In each config files:
+
+controller.properties
+
+listeners=CONTROLLER://:9093
+ 
+>Controller is running in the 9093 port and other Controller communicate via "Controller Protocal"
+
+broker.properties
+
+listeners=PLAINTEXT://localhost:9092
+ 
+>Broker is running in the 9092 port and other Brokers communicate via "PLAINTEXT" protocal
+
+server.properties
+listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+
+Broker is running in 9092 and other brokers communicate via "PLAINTEXT" Protcal
+Controller is running in 9093 and other controllers communciate via "CONTROLLER" Protocal
+.....................................................................................
+			advertised.listeners
+.....................................................................................
+
+In Kafka cluster who will be communicated by "Producers and Consumers"?
+
+Only Brokers not Controllers
+
+How producers and Consumers are communicating?
+
+ They also need Protocal to commmunicate.
+
+"PLAINTEXT" is default Protocal used by Clients
+
+advertised.listeners=PLAINTEXT://localhost:9092
+
+.....................................................................................
+			    LOG Dirs
+.....................................................................................
+if you set up multi nodes, we need to configure for each node we need separate log dirs.
+
+if you run brokers and controllers in the different host(machines), we dont need to configure separate folders
+
+if you run brokers and controllers in the same host(machines), we  need to configure separate folders
+
+log.dirs=/tmp/server-1/kraft-coimbined-logs
+log.dirs=/tmp/server-2/kraft-coimbined-logs
+log.dirs=/tmp/server-3/kraft-coimbined-logs
+....................................................................................
+
+Lab: How many servers you are going to create those many server config files can be 
+created
+
+I am going to create 3 config files: 
+
+Note : I am going to setup both broker and controller 
+/kafka_2.13-3.5.1/config/kraft$ cp server.properties server1.properties
+/kafka_2.13-3.5.1/config/kraft$ cp server.properties server2.properties
+/kafka_2.13-3.5.1/config/kraft$ cp server.properties server3.properties
 
 
+Node-1 Setup: server1.properties
+
+Controller port and broker port should be different.
+
+process.roles=broker,controller
+node.id=1
+controller.quorum.voters=1@localhost:19092,2@localhost:19093,3@localhost:19094
 
 
+listeners=PLAINTEXT://:9092,CONTROLLER://:19092
+inter.broker.listener.name=PLAINTEXT
+advertised.listeners=PLAINTEXT://localhost:9092
+controller.listener.names=CONTROLLER
+
+log.dirs=/tmp/server1/kraft-combined-logs
+
+.................
+Node-2 Setup: server2.properties
+
+process.roles=broker,controller
+node.id=2
+controller.quorum.voters=1@localhost:19092,2@localhost:19093,3@localhost:19094
+
+listeners=PLAINTEXT://:9093,CONTROLLER://:19093
+inter.broker.listener.name=PLAINTEXT
+advertised.listeners=PLAINTEXT://localhost:9093
+controller.listener.names=CONTROLLER
+
+log.dirs=/tmp/server2/kraft-combined-logs
+
+.........................................
+Node-3 Setup: server3.properties
+
+process.roles=broker,controller
+node.id=3
+controller.quorum.voters=1@localhost:19092,2@localhost:19093,3@localhost:19094
+
+listeners=PLAINTEXT://:9094,CONTROLLER://:19094
+inter.broker.listener.name=PLAINTEXT
+advertised.listeners=PLAINTEXT://localhost:9094
+controller.listener.names=CONTROLLER
+log.dirs=/tmp/server3/kraft-combined-logs
+....................................................................................
+Step 4 : Generate ClusterId:
+.............................
+./bin/kafka-storage.sh random-uuid
+  fWlzC68kRUOfsEFpaFnEtw
+
+Step 5: Format all storage directories
+subu@LAPTOP-R2TGGFDL:~/kafka_2.13-3.5.1$ ./bin/kafka-storage.sh format -t fWlzC68kRUOfsEFpaFnEtw -c ./config/kraft/server1.properties
+Formatting /tmp/server1/kraft-combined-logs with metadata.version 3.5-IV2.
+subu@LAPTOP-R2TGGFDL:~/kafka_2.13-3.5.1$ ./bin/kafka-storage.sh format -t fWlzC68kRUOfsEFpaFnEtw -c ./config/kraft/server2.properties
+Formatting /tmp/server2/kraft-combined-logs with metadata.version 3.5-IV2.
+subu@LAPTOP-R2TGGFDL:~/kafka_2.13-3.5.1$ ./bin/kafka-storage.sh format -t fWlzC68kRUOfsEFpaFnEtw -c ./config/kraft/server3.properties
+Formatting /tmp/server3/kraft-combined-logs with metadata.version 3.5-IV2.
+s
+
+Step 5:
+ We need to allocat max memory, in order to work cluster properly.
+
+export KAFKA_HEAP_OPTS="-Xmx200M -Xms100M"
+
+Step 6: 
+  We need to start all kafka servers in daemon mode / log mode
+
+Log Mode:
+
+./bin/kafka-server-start.sh ./config/kraft/server1.properties
+./bin/kafka-server-start.sh ./config/kraft/server1.properties
+./bin/kafka-server-start.sh ./config/kraft/server1.properties
+
+Daemon Mode
+./bin/kafka-server-start.sh -daemon ./config/kraft/server1.properties
+./bin/kafka-server-start.sh -daemon ./config/kraft/server1.properties
+./bin/kafka-server-start.sh -daemon ./config/kraft/server1.properties
 
 
+Step 7:
+ Test all Kafka servers are running
+jcmd |grep kafka
+7864 kafka.Kafka ./config/kraft/server3.properties
+8329 kafka.Kafka ./config/kraft/server1.properties
+7434 kafka.Kafka ./config/kraft/server2.properties
 
+Step 8:
+ create topic
+ ./bin/kafka-topics.sh --create --topic kraft-test --partitions 3 --replication-factor 3 --bootstrap-ser
+ver localhost:9092
+Created topic kraft-test.
 
+Step 9:
+ Describe
+./bin/kafka-topics.sh --describe --topic kraft-test  --bootstrap-server localhost:9092
+Topic: kraft-test       TopicId: XMWG3b5rTQavatJXlQFFHg PartitionCount: 3       ReplicationFactor: 3    Configs: segment.bytes=1073741824
+        Topic: kraft-test       Partition: 0    Leader: 2       Replicas: 2,3,1 Isr: 2,3,1
+        Topic: kraft-test       Partition: 1    Leader: 3       Replicas: 3,1,2 Isr: 3,1,2
+        Topic: kraft-test       Partition: 2    Leader: 1       Replicas: 1,2,3 Isr: 1,2,3
+
+Step 10:
+
+/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic kraft-test
+>Hello
+
+./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic kraft-test
+Hello
+
+Verify each server logs whether data has been replicated or not.
 
 
 
