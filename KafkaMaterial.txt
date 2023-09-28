@@ -2366,10 +2366,19 @@ Created topic kraft-test.
 Step 9:
  Describe
 ./bin/kafka-topics.sh --describe --topic kraft-test  --bootstrap-server localhost:9092
-Topic: kraft-test       TopicId: XMWG3b5rTQavatJXlQFFHg PartitionCount: 3       ReplicationFactor: 3    Configs: segment.bytes=1073741824
-        Topic: kraft-test       Partition: 0    Leader: 2       Replicas: 2,3,1 Isr: 2,3,1
-        Topic: kraft-test       Partition: 1    Leader: 3       Replicas: 3,1,2 Isr: 3,1,2
-        Topic: kraft-test       Partition: 2    Leader: 1       Replicas: 1,2,3 Isr: 1,2,3
+
+Topic: kraft-test     TopicId: XMWG3b5rTQavatJXlQFFHg
+PartitionCount: 3     ReplicationFactor: 3    Configs: segment.bytes=1073741824
+
+Topic: kraft-test       Partition: 0    Leader: 2       Replicas: 2,3,1 Isr: 2,3,1
+Topic: kraft-test       Partition: 1    Leader: 3       Replicas: 3,1,2 Isr: 3,1,2
+Topic: kraft-test       Partition: 2    Leader: 1       Replicas: 1,2,3 Isr: 1,2,3
+
+Kafka is replicating "log files" , log files are distributed among partitions.
+
+payment-topic-0 - 00000000000.log ----->
+
+Here for partition 0 leader is 2 (node-id=2)  Replicas: 2,3,1 Isr: 2,3,1
 
 Step 10:
 
@@ -2380,35 +2389,470 @@ Step 10:
 Hello
 
 Verify each server logs whether data has been replicated or not.
+....................................................................................
+				Kafka Connect
+.....................................................................................
+
+Kafka provides
+
+1.Storage layer
+  - How to store events
+  -Topic partitions segmentation
+  -Replication
+  -Management
+2.Compute layer
+   How to communicate Kafka stroage layer
+   How to process kafa data.
+
+1.producers
+2.consumers
+.....................................................................................
+What is Kafka connect?
+
+Kafka connect is a tool for scalably and reliably streaming data between apache kafka and other data systems.
+It makes it simple to quickly define connectors that move large set of data in and out of kafka.
+
+Connectors Core Concept:
+
+1.connect
+   It is server, which performs read and write data from the data sources into kafka storage layer called "broker"	
+
+2.connector
+   It is java lib/jar file which provides ligh level abstraction that takes care of data transfers
+
+3.Task
+    The implmenetation of how data is copied to or from kafka
+
+4.Workers
+    The workers or connect are running process that execute connectors and taks
+
+5.Converters
+   Data Serialization and deserialization tasks
+
+Why Connectors?
+
+ Data-centric piplelines: Connect uses meaningull data abstractions to pull or push data to kafka and from kafka.
+
+Types of connectors:
+
+1.Source connector
+   Collect data and send data into kafka storage layer.
+2.Sink Connector
+   Collect data from the Kafka storage layer and send to another data source
+....................................................................................
+			Connector implementation
+....................................................................................
+
+There are basic steps:
+
+1.start zookeeper if you want , or with Kraft mode.
+2.Connect Server 
+3.Data Source - it can be any data source
+
+Connect Server modes:
+1.standalone mode- single server
+2.distributed mode -multi node server like multi broker
 
 
+Config files for connect Server (Apache Kafka):
+................................................
+
+config/connect-standalone.properties
+
+Basic properties:
+.................
+bootstrap.servers=localhost:9092
+  The connect server is going to connect which kafka broker
+
+key.converter=org.apache.kafka.connect.json.JsonConverter
+value.converter=org.apache.kafka.connect.json.JsonConverter
+  
+  The connect will convert into incoming and outgoing events and data into json
 
 
+Plugins:
+  Connectors jar files / list of jar files
+
+1.connect jar files
+2.any dependency jar files
+
+plugin.path=libs/connect-file-3.5.1.jar
+
+  Connect server looks the plugin.path to activate "Connectors"
+
+Connectors:
+connect-file-3.5.1.jar -To reda data from the disk file and transfer data into kafka topic
+.....................................................................................
+			  UseCase :  File to Kafka 
+....................................................................................
+
+Are you going to use Source Connector or Sink Connector.
+
+if you are source connector
+
+config/connect-file-source.properties
+
+name=local-file-source
+connector.class=FileStreamSource
+tasks.max=1
+file=/home/subu/kafka_2.13-3.5.1/test.txt
+topic=connect-test
+
+if you are using sink connector
+config/connect-file-sink.properties
+
+name=local-file-sink
+connector.class=FileStreamSink
+tasks.max=1
+file=/home/subu/kafka_2.13-3.5.1/test.sink.txt
+topics=connect-test
 
 
+Note: To get the current location 
+$pwd
+/home/subu/kafka_2.13-3.5.1
+
+Steps:
+1.create test.txt file and keep some data
+ /kafka_2.13-3.5.1$ echo -e "hello" > test.txt
+
+>File would have been created in the root kafka folder.
 
 
+2.Start Zookeeper or Kraft
+./bin/zookeeper-server-start.sh config/zookeeper.properties
+3.Start Broker
+ ./bin/kafka-server-start.sh config/server.properties
+4.Start Connect
+./bin/connect-standalone.sh config/connect-standalone.properties  config/connect-file-source.properties  config/connect-file-sink.properties
+
+5.Start Consumer to test data arrival.
+./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic connect-test --from-beginning
+
+{"schema":{"type":"string","optional":false},"payload":"hello"}
+{"schema":{"type":"string","optional":false},"payload":"How are you"}
+{"schema":{"type":"string","optional":false},"payload":"i am"}
+
+6.Add More data into file and see changes inthe console
+kafka_2.13-3.5.1$ echo i am >> test.txt
+...................................................................................
+				Confulent Platform
+..................................................................................
+
+What is Confluent?
+
+ Confluent is basically a company who gives enterprise "Kafka Platform" -Confluent Kafka
+ Confluent Kafka is abstraction on the top of Apache kafka.
+
+ Confluent Kafka provides various production ready features.
+
+There are two major deployments
+
+1.Cloud
+2.Self Managed
+
+Self Managed
+
+Local:
+ zip -window
+ tar -Linux
+ docker
+
+Distributed
+ -Kubernets 
+ -Ansible Playbooks
+
+Steps:
+
+curl -O https://packages.confluent.io/archive/7.5/confluent-7.5.0.tar.gz
+
+tar xzf confluent-7.5.0.tar.gz.tar
+
+Folder description:
+
+/bin/  Driver scripts for starting and stopping services
+
+/etc/  Configuration files 
+
+/lib/ systemd services
+
+/libexec Multi platform cli binaries
+
+/share/  jars and some licenses
+
+/src/ Source files that requires a Platform independent build
+
+How to start using confluent ?
+
+./bin/confluent --help
+Manage your Confluent Cloud or Confluent Platform. Log in to see all available commands.
+
+Usage:
+  confluent [command]
+
+Available Commands:
+  cloud-signup    Sign up for Confluent Cloud.
+  completion      Print shell completion code.
+  context         Manage CLI configuration contexts.
+  help            Help about any command
+  kafka           Manage Apache Kafka.
+  local           Manage a local Confluent Platform development environment.
+  login           Log in to Confluent Cloud or Confluent Platform.
+  logout          Log out of Confluent Cloud or Confluent Platform.
+  plugin          Manage Confluent plugins.
+  prompt          Add Confluent CLI context to your terminal prompt.
+  secret          Manage secrets for Confluent Platform.
+  shell           Start an interactive shell.
+  version         Show version of the Confluent CLI.
+
+Flags:
+      --version         Show version of the Confluent CLI.
+  -h, --help            Show help for this command.
+      --unsafe-trace    Equivalent to -vvvv, but also log HTTP requests and responses which may contain plaintext secrets.
+  -v, --verbose count   Increase verbosity (-v for warn, -vv for info, -vvv for debug, -vvvv for trace).
+
+Use "confluent [command] --help" for more information about a command.
+
+In order to use Confluent in simple way 
+....................................................................................
+Optionally configure CONFLUENT_HOME
+
+export CONFLUENT_HOME=<The directory where Confluent is installed>
+
+export PATH=$PATH:$CONFLUENT_HOME/bin
+
+eg:
+$pwd
+/home/subu
+
+export CONFLUENT_HOME=/home/subu/confluent-7.5.0
+export PATH=$PATH:$CONFLUENT_HOME/bin
+.................
+
+How to use confluent commands?
+confluent --help
+Manage your Confluent Cloud or Confluent Platform. Log in to see all available commands.
+
+Usage:
+  confluent [command]
+
+Available Commands:
+  cloud-signup    Sign up for Confluent Cloud.
+  completion      Print shell completion code.
+  context         Manage CLI configuration contexts.
+  help            Help about any command
+  kafka           Manage Apache Kafka.
+  local           Manage a local Confluent Platform development environment.
+  login           Log in to Confluent Cloud or Confluent Platform.
+  logout          Log out of Confluent Cloud or Confluent Platform.
+  plugin          Manage Confluent plugins.
+  prompt          Add Confluent CLI context to your terminal prompt.
+  secret          Manage secrets for Confluent Platform.
+  shell           Start an interactive shell.
+  version         Show version of the Confluent CLI.
+
+Flags:
+      --version         Show version of the Confluent CLI.
+  -h, --help            Show help for this command.
+      --unsafe-trace    Equivalent to -vvvv, but also log HTTP requests and responses which may contain plaintext secrets.
+  -v, --verbose count   Increase verbosity (-v for warn, -vv for info, -vvv for debug, -vvvv for trace).
+
+Use "confluent [command] --help" for more information about a command.
+..............
+
+confluent local --help
+Use the "confluent local" commands to try out Confluent Platform by running a single-node instance locally on your machine. Keep in mind, these commands require Java to run.
+
+Usage:
+  confluent local [command]
+
+Available Commands:
+  current     Get the path of the current Confluent run.
+  destroy     Delete the data and logs for the current Confluent run.
+  services    Manage Confluent Platform services.
+  version     Print the Confluent Platform version.
+
+Global Flags:
+  -h, --help            Show help for this command.
+      --unsafe-trace    Equivalent to -vvvv, but also log HTTP requests and responses which may contain plaintext secrets.
+  -v, --verbose count   Increase verbosity (-v for warn, -vv for info, -vvv for debug, -vvvv for trace).
+
+Use "confluent local [command] --help" for more information about a command.
+...
+
+confluent local services --help
+Manage Confluent Platform services.
+
+Usage:
+  confluent local services [command]
+
+Available Commands:
+  connect         Manage Connect.
+  control-center  Manage Control Center.
+  kafka           Manage Apache Kafka®.
+  kafka-rest      Manage Kafka REST.
+  ksql-server     Manage ksqlDB Server.
+  list            List all Confluent Platform services.
+  schema-registry Manage Schema Registry.
+  start           Start all Confluent Platform services.
+  status          Check the status of all Confluent Platform services.
+  stop            Stop all Confluent Platform services.
+  top             View resource usage for all Confluent Platform services.
+  zookeeper       Manage Apache ZooKeeper™.
+
+Global Flags:
+  -h, --help            Show help for this command.
+      --unsafe-trace    Equivalent to -vvvv, but also log HTTP requests and responses which may contain plaintext secrets.
+  -v, --verbose count   Increase verbosity (-v for warn, -vv for info, -vvv for debug, -vvvv for trace).
+
+Use "confluent local services [command] --help" for more information about a command.
+
+...................................................................................
+			 How to start confluent platform services
+
+1.zookeeper
+2.broker
+3.control center
+4.rest api server
+5.streaming server
+6.connect server
+ confluent local services start
+The local commands are intended for a single-node development environment only, NOT for production usage. See more: https://docs.confluent.io/current/cli/index.html
+As of Confluent Platform 8.0, Java 8 is no longer supported.
+
+Using CONFLUENT_CURRENT: /tmp/confluent.960781
+Starting ZooKeeper
+ZooKeeper is [UP]
+Starting Kafka
+Kafka is [UP]
+Starting Schema Registry
+Schema Registry is [UP]
+Starting Kafka REST
+Kafka REST is [UP]
+Starting Connect
+Connect is [UP]
+Starting ksqlDB Server
+ksqlDB Server is [UP]
+Starting Control Center
+....................................................................................
+How to use confluent platform
+
+There are two ways 
+1.gui tool - control center
+2.using cli tools
+
+Task:
+ Lanuch Center
+ Create topic 
+ Publish Some message
+ 
+export CONFLUENT_HOME=/home/subu/confluent-7.5.0
+ kafka-console-consumer --bootstrap-server localhost:9092 --topic todos_topic --from-beginning
+{"ordertime":1497014222380,"orderid":18,"itemid":"Item_184","address":{"city":"Mountain View","state":"CA","zipcode":94041}}
+{"ordertime":1497014222380,"orderid":18,"itemid":"Item_184","address":{"city":"Mountain View","state":"CA","zipcode":94041}}
+{"ordertime":1497014222380,"orderid":18,"itemid":"Item_184","address":{"city":"Mountain View","state":"CA","zipcode":94041}}
+{"ordertime":1497014222380,"orderid":18,"itemid":"Item_184","address":{"city":"Mountain View","state":"CA","zipcode":94041}}
+{"ordertime":1497014222380,"orderid":18,"itemid":"Item_184","address":{"city":"Mountain View","state":"CA","zipcode":94041}}
+{"ordertime":1497014222380,"orderid":18,"itemid":"Item_184","address":{"city":"Mountain View","state":"CA","zipcode":94041}}
+{"ordertime":1497014222380,"orderid":18,"itemid":"Item_184","address":{"city":"Mountain View","state":"CA","zipcode":94041}
+.....................................................................................				Confluent Platform and connectors
+.....................................................................................
+JDBC Connectors
+
+1.JDBC Connectors
+2.JBDC Sink Connectors
+
+Most of the confluent connectors are available
+https://www.confluent.io/hub/
+
+What is jdbc connector?
+ jdbc connector is just jar file
+
+in order to install jdbc connector into confluent platform we have two ways
+
+1.Manuall installation
+2.via confluent hub client cli tool.
+
+Steps:
+ in order to with jdbc connectors 
+you need to what database you are going to use (mysql,postresql,mssql,oracle...)
+
+1.Make sure that database is running
+2.Jdbc driver jars
+3.Jdbc connector jars.
+
+CONNECTOR HUB URL:
+https://www.confluent.io/hub/confluentinc/kafka-connect-jdbc
+
+export CONFLUENT_HOME=/home/subu/confluent-7.5.0
+export PATH=$PATH:$CONFLUENT_HOME/bin
+confluent-hub install confluentinc/kafka-connect-jdbc:10.7.4
+The component can be installed in any of the following Confluent Platform installations:
+  1. /home/subu/confluent-7.5.0 (based on $CONFLUENT_HOME)
+  2. /home/subu/confluent-7.5.0 (found in the current directory)
+  3. /home/subu/confluent-7.5.0 (where this tool is installed)
+Choose one of these to continue the installation (1-3): 1
+Do you want to install this into /home/subu/confluent-7.5.0/share/confluent-hub-components? (yN) y
 
 
+Component's license:
+Confluent Community License
+https://www.confluent.io/confluent-community-license
+I agree to the software license agreement (yN) y
 
+Downloading component Kafka Connect JDBC 10.7.4, provided by Confluent, Inc. from Confluent Hub and installing into /home/subu/confluent-7.5.0/share/confluent-hub-components
+Detected Worker's configs:
+  1. Standard: /home/subu/confluent-7.5.0/etc/kafka/connect-distributed.properties
+  2. Standard: /home/subu/confluent-7.5.0/etc/kafka/connect-standalone.properties
+  3. Standard: /home/subu/confluent-7.5.0/etc/schema-registry/connect-avro-distributed.properties
+  4. Standard: /home/subu/confluent-7.5.0/etc/schema-registry/connect-avro-standalone.properties
+  5. Based on CONFLUENT_CURRENT: /tmp/confluent.960781/connect/connect.properties
+  6. Used by Connect process with PID 17511: /tmp/confluent.960781/connect/connect.properties
+Do you want to update all detected configs? (yN) y
 
+Adding installation directory to plugin path in the following files:
+  /home/subu/confluent-7.5.0/etc/kafka/connect-distributed.properties
+  /home/subu/confluent-7.5.0/etc/kafka/connect-standalone.properties
+  /home/subu/confluent-7.5.0/etc/schema-registry/connect-avro-distributed.properties
+  /home/subu/confluent-7.5.0/etc/schema-registry/connect-avro-standalone.properties
+  /tmp/confluent.960781/connect/connect.properties
+  /tmp/confluent.960781/connect/connect.properties
 
+Completed
 
+If you are going to use "mysql" database, mysql connector jar must have been placed 
 
+home\subu\confluent-7.5.0\share\confluent-hub-components\confluentinc-kafka-connect-jdbc\lib
+mysql-connector-java-8.0.16.jar
 
+After installing make sure that etc/kafka/server.properties files having the below configuration.
 
+By default confluent platform kafka listner configuration is disabled by default , we need to enable
 
+listeners=PLAINTEXT://:9092
 
+# Listener name, hostname and port the broker will advertise to clients.
+# If not set, it uses the value for "listeners".
+advertised.listeners=PLAINTEXT://your.host.name:9092
 
+Make sure that kafka-connect-jdbc-10.7.4.jar is also present in that lib location.
+..............................
 
+Maksure that etc/kafka/connect-standalone.properties
 
+plugin.path=/home/subu/confluent-7.5.0/share/confluent-hub-components
+....................................................................................
 
+Start Database:
+  ->Mysql database via docker.
 
-			
+Start mysql server:
+ This mysql server contains ready made database called inventory.
 
+docker run -it --rm --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=debezium -e MYSQL_USER=mysqluser -e MYSQL_PASSWORD=mysqlpw quay.io/debezium/example-mysql:2.3
 
-
-
+start Mysql client utilty
+ docker run -it --rm --name mysqlterm --link mysql --rm mysql:8.0 sh -c 'exec mysql -h"$MYSQL_PORT_3306_TCP_ADDR" -P"$MYSQL_PORT_3306_TCP_PORT" -uroot -p"$MYSQL_ENV_MYSQL_ROOT_PASSWORD"'
 
 
 
