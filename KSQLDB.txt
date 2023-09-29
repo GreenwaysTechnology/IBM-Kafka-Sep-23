@@ -1,0 +1,181 @@
+
+Streams:
+A stream is a partitioned, immutable, append-only collection that represents a series of historical facts.
+
+ For example, the rows of a stream could model a sequence of financial transactions, like "Alice sent $100 to Bob", followed by "Charlie sent $50 to Bob".
+
+Once a row is inserted into a stream, it can never change. New rows can be appended at the end of the stream, but existing rows can never be updated or deleted.
+
+Each row is stored in a particular partition. Every row, implicitly or explicitly, has a key that represents its identity. All rows with the same key reside in the same partition.
+
+
+Materialized view
+..................
+A materialized view is a pre-computed data set derived from a query specification (the SELECT in the view definition) and stored for later use. Because the data is pre-computed, querying a materialized view is faster than executing a query against the base table of the view.
+
+Tables:
+A table is a mutable, partitioned collection that models change over time. In contrast with a stream, which represents a historical sequence of events, a table represents what is true as of "now". For example, you might use a table to model the locations where someone has lived as a stream: first Miami, then New York, then London, and so forth.
+
+Tables work by leveraging the keys of each row. If a sequence of rows shares a key, the last row for a given key represents the most up-to-date information for that key's identity. A background process periodically runs and deletes all but the newest rows for each key.
+
+docker-compose.yml
+---
+version: '2'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  broker:
+    image: confluentinc/cp-kafka:7.4.0
+    hostname: broker
+    container_name: broker
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  ksqldb-server:
+    image: confluentinc/ksqldb-server:0.29.0
+    hostname: ksqldb-server
+    container_name: ksqldb-server
+    depends_on:
+      - broker
+    ports:
+      - "8088:8088"
+    environment:
+      KSQL_LISTENERS: http://0.0.0.0:8088
+      KSQL_BOOTSTRAP_SERVERS: broker:9092
+      KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE: "true"
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE: "true"
+
+  ksqldb-cli:
+    image: confluentinc/ksqldb-cli:0.29.0
+    container_name: ksqldb-cli
+    depends_on:
+      - broker
+      - ksqldb-server
+    entrypoint: /bin/sh
+    tty: true
+
+
+enter into kafka console:
+[appuser@broker bin]$ pwd
+/usr/bin
+
+kafka-topics.sh --bootstrap-server localhost:9092 --create --topic todos-topic
+
+
+Open ksqldb prompt:'
+ksql> show topics;
+
+ Kafka Topic                 | Partitions | Partition Replicas
+---------------------------------------------------------------
+ default_ksql_processing_log | 1          | 1
+ todos-topic                 | 1          | 1
+---------------------------------------------------------------
+
+create simple todos stream
+
+ksql> create stream todos_stream(title VARCHAR,status VARCHAR) WITH (KAFKA_TOPIC='todos-topic',VALUE_FORMAT='DELIMITED');
+
+ Message
+----------------
+ Stream created
+----------------
+
+List streams:
+ksql> list streams;
+
+ Stream Name         | Kafka Topic                 | Key Format | Value Format | Windowed
+------------------------------------------------------------------------------------------
+ KSQL_PROCESSING_LOG | default_ksql_processing_log | KAFKA      | JSON         | false
+ TODOS_STREAM        | todos-topic                 | KAFKA      | DELIMITED    | false
+-------------------------------------------------------------------------------------
+
+Write Query:
+SELECT title,status from todos_stream emit changes;
+
+In the Kafka terminal:
+$ kafka-console-producer --bootstrap-server localhost:9092 --topic todos-topic
+>Learn Kafka,done
+>
+
+Watch Query Window:
+ksql> SELECT title,status from todos_stream emit changes;
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|TITLE                                                                 |STATUS                                                                |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|Learn Kafka                                                           |done                                                                  |
+
+..
+
+By default it reads only latest events,
+if you want historical events.
+
+ksql> SET 'auto.offset.reset'='earliest';
+>
+Successfully changed local property 'auto.offset.reset' to 'earliest'. Use the UNSET command to revert your change.
+ksql> SELECT title,status from todos_stream emit changes;
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|TITLE                                                                 |STATUS                                                                |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|Learn Kafka                                                           |done                                                                  |
+|Learn Kafka Streams                                                   |going                                                                 |
+^CQuery terminated
+
+
+PULL Query:
+............
+
+SELECT title,status from todos_stream;
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|TITLE                                                                 |STATUS                                                                |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|Learn Kafka                                                           |done                                                                  |
+|Learn Kafka Streams                                                   |going                                                                 |
+Query Completed
+Query terminated
+
+PUSH Query:
+ it wont terminate waits for new events arrived.
+
+
+Using Limit:
+ksql> SELECT title,status from todos_stream limit 1;
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|TITLE                                                                 |STATUS                                                                |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|Learn Kafka                                                           |done                                                                  |
+Limit Reached
+Query terminated
+k
+
+Aggregate:
+select  count(*) , status from todos_stream group by status emit changes;
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|KSQL_COL_0                                                            |STATUS                                                                |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+|1                                                                     |going                                                                 |
+|2                                                                     |done                                                                  |
+|3
+
+
+
+

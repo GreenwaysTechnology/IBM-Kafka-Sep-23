@@ -2829,11 +2829,11 @@ After installing make sure that etc/kafka/server.properties files having the bel
 
 By default confluent platform kafka listner configuration is disabled by default , we need to enable
 
-listeners=PLAINTEXT://:9092
+listeners=PLAINTEXT://localhost:9092
 
 # Listener name, hostname and port the broker will advertise to clients.
 # If not set, it uses the value for "listeners".
-advertised.listeners=PLAINTEXT://your.host.name:9092
+advertised.listeners=PLAINTEXT://localhost:9092
 
 Make sure that kafka-connect-jdbc-10.7.4.jar is also present in that lib location.
 ..............................
@@ -2851,16 +2851,346 @@ Start mysql server:
 
 docker run -it --rm --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=debezium -e MYSQL_USER=mysqluser -e MYSQL_PASSWORD=mysqlpw quay.io/debezium/example-mysql:2.3
 
-start Mysql client utilty
+start Mysql client utilty(in windows powershell)
+
  docker run -it --rm --name mysqlterm --link mysql --rm mysql:8.0 sh -c 'exec mysql -h"$MYSQL_PORT_3306_TCP_ADDR" -P"$MYSQL_PORT_3306_TCP_PORT" -uroot -p"$MYSQL_ENV_MYSQL_ROOT_PASSWORD"'
 
 
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| inventory          |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+5 rows in set (0.00 sec)
 
 
+change database
+mysql> use inventory
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+m
+
+show tables:
+mysql> show tables;
++---------------------+
+| Tables_in_inventory |
++---------------------+
+| addresses           |
+| customers           |
+| geom                |
+| orders              |
+| products            |
+| products_on_hand    |
++---------------------+
+6 rows in set (0.00 sec)
+
+mysql> select * from orders;
++--------------+------------+-----------+----------+------------+
+| order_number | order_date | purchaser | quantity | product_id |
++--------------+------------+-----------+----------+------------+
+|        10001 | 2016-01-16 |      1001 |        1 |        102 |
+|        10002 | 2016-01-17 |      1002 |        2 |        105 |
+|        10003 | 2016-02-19 |      1002 |        2 |        106 |
+|        10004 | 2016-02-21 |      1003 |        1 |        107 |
++--------------+------------+-----------+----------+------------+
+4 rows in set (0.00 sec)
+ysql> select *from customers;
++------+------------+-----------+-----------------------+
+| id   | first_name | last_name | email                 |
++------+------------+-----------+-----------------------+
+| 1001 | Sally      | Thomas    | sally.thomas@acme.com |
+| 1002 | George     | Bailey    | gbailey@foobar.com    |
+| 1003 | Edward     | Walker    | ed@walker.com         |
+| 1004 | Anne       | Kretchmar | annek@noanswer.org    |
++------+------------+-----------+-----------------------+
+4 rows in set (0.00 sec)
+
+Start or restart all confluent services
+
+We have done so far
+1.we have installed connector jars and jdbc drivers
+2.we have started database -mysql.
+
+Now we need to push "configuration" to connect service(server)
+
+Do you remember we have used "connect-file-source.properties" for file configuration.
+
+instead of having separate configuration file, we can push to connect server via 
+GUI tool or curl utility. it should be HTTP post call.
+
+Basic connector configuration:
+{
+  "name": "JdbcSourceConnectorConnector_0",
+  "config": {
+    "name": "JdbcSourceConnectorConnector_0",
+    "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "connection.url": "jdbc:mysql://127.0.0.1:3306/inventory?verifyServerCertificate=false&useSSL=true&requireSSL=true",
+    "connection.user": "debezium",
+    "connection.password": "***",
+    "mode": "bulk"
+  }
+}
+
+How to push the above configuration to connect server?
+
+http://localhost:9021/clusters/I3jfof3mQDCHEkX8SZMCww/management/connect/connect-default/connectors
+
+Go to connect option
+
+ Select "connect-defalut"
+	YOu can find connectors
+   
+ click--->   JDBCSourceconnector --> Add configuration and lanuch,, 
+
+Asper the above configuration
+
+connection url:jdbc:mysql://127.0.0.1:3306/inventory?verifyServerCertificate=false&useSSL=true&requireSSL=true
+
+username mysqluser
+password mysqlpw
+
+You can see now the data started moving from database to kafka topics.
+.....................................................................................
+			.....................................................................................
+			 CDC -Change Data Capture
+.....................................................................................
+
+What is CDC ?
+  	Change data capture (CDC) refers to the tracking of all changes in a data sources (databases, data warehouses, etc.) so they can be captured in destination systems.
+
+	In short, CDC allows organizations to achieve data integrity and consistency across all systems and deployment environments. 
+
+	Additionally, it allows organizations to use the right tool for the right job by moving data from legacy databases to purpose-built data platforms, such as document or search databases and data warehouses.
+
+What is Debezium?
+
+ Debezium is an open source distributed platform for change data capture. Start it up, point it at your databases, and your apps can start responding to all of the inserts, updates, and deletes that other apps commit to your databases. Debezium is durable and fast, so your apps can respond quickly and never miss an event, even when things go wrong.
+
+Debeizum Architecture:
+
+Source connectors such as Debezium that send records into Kafka
+
+Sink connectors that propagate records from Kafka topics to other systems
+
+...................................................................................
+		  CDC implementation using Debezium with MySQL
+...................................................................................
+
+Setup:
+
+1.You can use local confluent platform
+2.You can use docker setup
+3.You can use confluent cloud platorm - 0- installation.
 
 
+Docker setup:
+2.you can use docker compose or indiduval docker commands.
+
+Start Zookeeper
+
+Start Kafka
+
+Start a MySQL database
+
+Start a MySQL command line client
+
+Start Kafka Connect
+
+This tutorial uses Docker and the Debezium container images to run the ZooKeeper, Kafka, Debezium, and MySQL services. 
+
+$ docker run -it --rm --name zookeeper -p 2181:2181 -p 2888:2888 -p 3888:3888 quay.io/debezium/zookeeper:2.3
+
+$ docker run -it --rm --name kafka -p 9092:9092 --link zookeeper:zookeeper quay.io/debezium/kafka:2.3
+
+$ docker run -it --rm --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=debezium -e MYSQL_USER=mysqluser -e MYSQL_PASSWORD=mysqlpw quay.io/debezium/example-mysql:2.3
+
+$ docker run -it --rm --name mysqlterm --link mysql --rm mysql:8.0 sh -c 'exec mysql -h"$MYSQL_PORT_3306_TCP_ADDR" -P"$MYSQL_PORT_3306_TCP_PORT" -uroot -p"$MYSQL_ENV_MYSQL_ROOT_PASSWORD"'
+
+docker run -it --rm --name connect -p 8083:8083 -e GROUP_ID=1 -e CONFIG_STORAGE_TOPIC=my_connect_configs -e OFFSET_STORAGE_TOPIC=my_connect_offsets -e STATUS_STORAGE_TOPIC=my_connect_statuses --link kafka:kafka --link mysql:mysql quay.io/debezium/connect:2.3
+
+After running:
+
+Test connector service is running or not.
+
+$ curl -H "Accept:application/json" localhost:8083/
+{"version":"3.4.0","commit":"cb8625948210849f"} 
 
 
+$ curl -H "Accept:application/json" localhost:8083/connectors/
+[] 
+
+Deploying the MySQL connector
+
+After starting the Debezium and MySQL services, you are ready to deploy the Debezium MySQL connector so that it can start monitoring the sample MySQL database (inventory).
+
+At this point, you are running the Debezium services, a MySQL database server with a sample inventory database, and the MySQL command line client that is connected to the database. To deploy the MySQL connector, you must:
+
+Register the MySQL connector to monitor the inventory database
+
+After the connector is registered, it will start monitoring the database server’s binlog and it will generate change events for each row that changes.
+
+Watch the MySQL connector start
+
+Reviewing the Kafka Connect log output as the connector starts helps you to better understand each task it must complete before it can start monitoring the binlog.
+
+What is binlog?
+  binary log
+
+The binary log contains “events” that describe database changes such as table creation operations or changes to table data. It also contains events for statements that potentially could have made changes (for example, a DELETE which matched no rows), unless row-based logging is used.
+
+Note:
+In a production environment, you would typically either use the Kafka tools to manually create the necessary topics, including specifying the number of replicas, or you’d use the Kafka Connect mechanism for customizing the settings of auto-created topics. However, for this tutorial, Kafka is configured to automatically create the topics with just one replica.
+
+Procedure:
+Review the configuration of the Debezium MySQL connector that you will register.
+
+Before registering the connector, you should be familiar with its configuration. In the next step, you will register the following connector:
+
+{
+  "name": "inventory-connector",  
+  "config": {  
+    "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+    "tasks.max": "1",  
+    "database.hostname": "mysql",  
+    "database.port": "3306",
+    "database.user": "debezium",
+    "database.password": "dbz",
+    "database.server.id": "184054",  
+    "topic.prefix": "dbserver1",  
+    "database.include.list": "inventory",  
+    "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",  
+    "schema.history.internal.kafka.topic": "schema-changes.inventory"  
+  }
+}
+
+2.Open a new terminal, and use the curl command to register the Debezium MySQL connector.
+
+Note: use git bash 
+
+$ curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" localhost:8083/connectors/ -d '{ "name": "inventory-connector", "config": { "connector.class": "io.debezium.connector.mysql.MySqlConnector", "tasks.max": "1", "database.hostname": "mysql", "database.port": "3306", "database.user": "debezium", "database.password": "dbz", "database.server.id": "184054", "topic.prefix": "dbserver1", "database.include.list": "inventory", "schema.history.internal.kafka.bootstrap.servers": "kafka:9092", "schema.history.internal.kafka.topic": "schemahistory.inventory" } }'
+
+After installing :
+Test
+http://localhost:8083/connectors/
+
+Response:
+[
+"inventory-connector"
+]
+
+http://localhost:8083/connectors/inventory-connector
+
+{
+name: "inventory-connector",
+config: {
+connector.class: "io.debezium.connector.mysql.MySqlConnector",
+database.user: "debezium",
+topic.prefix: "dbserver1",
+schema.history.internal.kafka.topic: "schemahistory.inventory",
+database.server.id: "184054",
+tasks.max: "1",
+database.hostname: "mysql",
+database.password: "dbz",
+name: "inventory-connector",
+schema.history.internal.kafka.bootstrap.servers: "kafka:9092",
+database.port: "3306",
+database.include.list: "inventory"
+},
+tasks: [
+{
+connector: "inventory-connector",
+task: 0
+}
+],
+type: "source"
+}
+
+Viewing change events
+After deploying the Debezium MySQL connector, it starts monitoring the inventory database for data change events.
+
+Viewing a create event
+
+Updating the database and viewing the update event
+
+Deleting a record in the database and viewing the delete event
+
+Restarting Kafka Connect and changing the database
+
+$ docker run -it --rm --name watcher --link zookeeper:zookeeper --link kafka:kafka quay.io/debezium/kafka:2.3 watch-topic -a -k dbserver1.inventory.customers
+
+
+...
+
+Watch inside docker terminal changes
+in the topic
+./kafka-topics.sh --list --bootstrap-server 172.17.0.1:9092
+__consumer_offsets
+dbserver1
+dbserver1.inventory.addresses
+dbserver1.inventory.customers
+dbserver1.inventory.geom
+dbserver1.inventory.orders
+dbserver1.inventory.products
+dbserver1.inventory.products_on_hand
+my_connect_configs
+my_connect_offsets
+my_connect_statuses
+schemahistory.inventory
+
+ ./kafka-topics.sh --topic  dbserver1.inventory.customers --describe --bootstrap-server 172.17.0.1:9092
+Topic: dbserver1.inventory.customers    TopicId: G6hEi6d5ThKpKwjGxl-Ujg PartitionCount: 1       ReplicationFactor: 1    Configs: 
+        Topic: dbserver1.inventory.customers    Partition: 0    Leader: 1       Replicas: 1     Isr: 1
+
+./kafka-console-consumer.sh  --bootstrap-server 172.17.0.1:9092 --topic dbserver1.inventory.customers --from-beginning
+
+Watching:
+Updating the databases and viewing the update event.
+
+h-5.2$ ls
+LICENSE  NOTICE  bin  config  config.orig  data  libs  licenses  logs
+sh-5.2$ cd bin
+sh-5.2$ ls
+connect-distributed.sh        kafka-console-producer.sh    kafka-leader-election.sh       kafka-run-class.sh                  kafka-verifiable-producer.sh
+connect-mirror-maker.sh       kafka-consumer-groups.sh     kafka-log-dirs.sh              kafka-server-start.sh               trogdor.sh
+connect-standalone.sh         kafka-consumer-perf-test.sh  kafka-metadata-quorum.sh       kafka-server-stop.sh                windows
+kafka-acls.sh                 kafka-delegation-tokens.sh   kafka-metadata-shell.sh        kafka-storage.sh                    zookeeper-security-migration.sh
+kafka-broker-api-versions.sh  kafka-delete-records.sh      kafka-mirror-maker.sh          kafka-streams-application-reset.sh  zookeeper-server-start.sh
+kafka-cluster.sh              kafka-dump-log.sh            kafka-producer-perf-test.sh    kafka-topics.sh                     zookeeper-server-stop.sh
+kafka-configs.sh              kafka-features.sh            kafka-reassign-partitions.sh   kafka-transactions.sh               zookeeper-shell.sh
+kafka-console-consumer.sh     kafka-get-offsets.sh         kafka-replica-verification.sh  kafka-verifiable-consumer.sh
+sh-5.2$ kafka-topics.sh --list --bootstrap-server 172.17.0.1:9092
+sh: kafka-topics.sh: command not found
+sh-5.2$ ./kafka-topics.sh --list --bootstrap-server 172.17.0.1:9092
+__consumer_offsets
+dbserver1
+dbserver1.inventory.addresses
+dbserver1.inventory.customers
+dbserver1.inventory.geom
+dbserver1.inventory.orders
+dbserver1.inventory.products
+dbserver1.inventory.products_on_hand
+my_connect_configs
+my_connect_offsets
+my_connect_statuses
+schemahistory.inventory
+sh-5.2$ 
+
+Clean up:
+docker stop mysqlterm watcher connect mysql kafka zookeeper
+mysqlterm
+watcher
+connect
+mysql
+kafka
+zookeeper
+....................................................................................
 
 
 

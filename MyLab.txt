@@ -1,0 +1,45 @@
+My Lab
+
+Log Flush Policy:
+############################# Log Flush Policy #############################
+default.replication.factor=1
+log.flush.interval.messages=100000
+log.flush.interval.ms=50000
+log.flush.scheduler.interval.ms=2000
+A log flush forces Kafka to flush topic messages from page cache, writing the messages to disk. We recommend using the default flush settings, which rely on background flushes done by Linux and Kafka. Default settings provide high throughput and low latency, and they guarantee recovery through the use of replication.
+
+
+Kafka Consumer Groups & Offsets
+
+We have seen that consumers can consume data from Kafka topics partitions individually, but for horizontal scalability purposes it is recommended to consume Kafka topics as a group
+
+Kafka Consumer Groups
+
+Consumers that are part of the same application and therefore performing the same "logical job" can be grouped together as a Kafka consumer group.
+
+A topic usually consists of many partitions. These partitions are a unit of parallelism for Kafka consumers.
+
+The benefit of leveraging a Kafka consumer group is that the consumers within the group will coordinate to split the work of reading from different partitions.
+
+
+Kafka Consumer Group ID
+ In order for indicating to Kafka consumers that they are part of the same specific group , we must specify the consumer-side setting group.id.
+
+Kafka Consumers automatically use a GroupCoordinator and a ConsumerCoordinator to assign consumers to a partition and ensure the load balancing is achieved across all consumers in the same group.
+
+
+Each of your applications (that may be composed of many consumers) reading from Kafka topics must specify a different group.id. That means that multiple applications (consumer groups) can consume from the same topic at the same time:
+
+Refer pic
+
+
+Kafka Consumer Offsets
+Kafka brokers use an internal topic named __consumer_offsets that keeps track of what messages a given consumer group last successfully processed.
+
+As we know, each message in a Kafka topic has a partition ID and an offset ID attached to it.
+
+Therefore, in order to "checkpoint" how far a consumer has been reading into a topic partition, the consumer will regularly commit the latest processed message, also known as consumer offset.
+
+In the figure below, a consumer from the consumer group has consumed messages up to offset 4262, so the consumer offset is set to 4262.
+
+

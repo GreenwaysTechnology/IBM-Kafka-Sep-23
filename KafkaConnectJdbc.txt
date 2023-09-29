@@ -1,0 +1,205 @@
+The JDBC Source and Sink connectors use the Java Database Connectivity (JDBC) API that enables applications to connect to and use a wide range of database systems. In order for this to work, the connectors must have a JDBC driver for the particular database systems you will use.
+
+The connector comes with JDBC drivers for a few database systems, but before you use the connector with other database systems, you must install the most recent JDBC 4.0 drivers for those database systems. Although the details vary for each JDBC driver, the basic steps are:
+
+Basic steps:
+
+1.Run sql server with sample database.
+
+mysql server
+$ docker run -it --rm --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=debezium -e MYSQL_USER=mysqluser -e MYSQL_PASSWORD=mysqlpw quay.io/debezium/example-mysql:2.3
+
+client
+
+$ docker run -it --rm --name mysqlterm --link mysql --rm mysql:8.0 sh -c 'exec mysql -h"$MYSQL_PORT_3306_TCP_ADDR" -P"$MYSQL_PORT_3306_TCP_PORT" -uroot -p"$MYSQL_ENV_MYSQL_ROOT_PASSWORD"'
+
+Test Database is working or not.
+..................................................................................
+
+Confluent kafka setup:
+
+download latest confluent platform.
+curl -O https://packages.confluent.io/archive/7.4/confluent-community-7.4.1.tar.gz
+tar xzf confluent-7.4.1.tar.gz
+
+optional you configure:
+export CONFLUENT_HOME=/home/subu/confluent-7.4.1
+export PATH=$PATH:$CONFLUENT_HOME/bin
+
+In order to connect databases
+
+1.we need jdbc driver jars.
+ download 
+   mysql-connector-java-8.0.16.jar
+
+2.install jdbc connector jar 
+https://www.confluent.io/hub/confluentinc/kafka-connect-jdbc
+confluent-hub install confluentinc/kafka-connect-jdbc:10.7.3
+
+ confluent-hub install confluentinc/kafka-connect-jdbc:10.7.3
+The component can be installed in any of the following Confluent Platform installations:
+  1. /home/subu/confluent-7.4.1 (based on $CONFLUENT_HOME)
+  2. /home/subu/confluent-7.4.1 (where this tool is installed)
+Choose one of these to continue the installation (1-2): 1
+Do you want to install this into /home/subu/confluent-7.4.1/share/confluent-hub-components? (yN) y
+
+
+Component's license:
+Confluent Community License
+https://www.confluent.io/confluent-community-license
+I agree to the software license agreement (yN) y
+
+Downloading component Kafka Connect JDBC 10.7.3, provided by Confluent, Inc. from Confluent Hub and installing into /home/subu/confluent-7.4.1/share/confluent-hub-components
+Detected Worker's configs:
+  1. Standard: /home/subu/confluent-7.4.1/etc/kafka/connect-distributed.properties
+  2. Standard: /home/subu/confluent-7.4.1/etc/kafka/connect-standalone.properties
+  3. Standard: /home/subu/confluent-7.4.1/etc/schema-registry/connect-avro-distributed.properties
+  4. Standard: /home/subu/confluent-7.4.1/etc/schema-registry/connect-avro-standalone.properties
+  5. Based on CONFLUENT_CURRENT: /tmp/confluent.004843/connect/connect.properties
+  6. Used by Connect process with PID 13118: /tmp/confluent.004843/connect/connect.properties
+Do you want to update all detected configs? (yN) y
+
+Adding installation directory to plugin path in the following files:
+  /home/subu/confluent-7.4.1/etc/kafka/connect-distributed.properties
+  /home/subu/confluent-7.4.1/etc/kafka/connect-standalone.properties
+  /home/subu/confluent-7.4.1/etc/schema-registry/connect-avro-distributed.properties
+  /home/subu/confluent-7.4.1/etc/schema-registry/connect-avro-standalone.properties
+  /tmp/confluent.004843/connect/connect.properties
+  /tmp/confluent.004843/connect/connect.properties
+
+Completed
+
+After installing make sure /etc/kafka/server.properties files are having the below configuration
+
+listeners=PLAINTEXT://localhost:9092
+
+# Listener name, hostname and port the broker will advertise to clients.
+# If not set, it uses the value for "listeners".
+advertised.listeners=PLAINTEXT://localhost:9092
+
+make sure that kafka-connect-jdbc-10.7.3.jar file is available 
+
+home\subu\confluent-7.4.1\share\confluent-hub-components\confluentinc-kafka-connect-jdbc\lib
+
+copy jdbc driver files also inthe same location.
+
+home\subu\confluent-7.4.1\share\confluent-hub-components\confluentinc-kafka-connect-jdbc\lib
+
+mysql-connector-java-8.0.16.jar
+..................................................................................
+
+Make sure that etc/kafka/connect-standalone.properties
+
+plugin.path=/home/subu/confluent-7.4.1/share/confluent-hub-components
+
+the above configuration is mapped.
+
+
+start databases
+docker run -it --rm --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=debezium -e MYSQL_USER=mysqluser -e MYSQL_PASSWORD=mysqlpw quay.io/debezium/example-mysql:2.3
+
+ docker run -it --rm --name mysqlterm --link mysql --rm mysql:8.0 sh -c 'exec mysql -h"$MYSQL_PORT_3306_TCP_ADDR" -P"$MYSQL_PORT_3306_TCP_PORT" -uroot -p"$MYSQL_ENV_MYSQL_ROOT_PASSWORD"'
+
+mysql: [Warning] Using a password on the command line interface can be insecure.
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 8
+Server version: 8.0.33 MySQL Community Server - GPL
+
+Copyright (c) 2000, 2023, Oracle and/or its affiliates.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+
+mysql> use inventory
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql>
+mysql> show tables;
++---------------------+
+| Tables_in_inventory |
++---------------------+
+| addresses           |
+| customers           |
+| geom                |
+| orders              |
+| products            |
+| products_on_hand    |
++---------------------+
+6 rows in set (0.00 sec)
+.........................................................
+
+Start kafka connect with kafka server,zookeeper, etc....
+
+confluent local services start
+The local commands are intended for a single-node development environment only, NOT for production usage. See more: https://docs.confluent.io/current/cli/index.html
+As of Confluent Platform 8.0, Java 8 is no longer supported.
+
+Using CONFLUENT_CURRENT: /tmp/confluent.004843
+Starting ZooKeeper
+ZooKeeper is [UP]
+Kafka is [UP]
+Schema Registry is [UP]
+Kafka REST is [UP]
+Connect is [UP]
+ksqlDB Server is [UP]
+Control Center is [UP]
+
+Go to control centers:
+http://localhost:9021/clusters
+
+select default cluster
+
+select connect
+
+Add connector
+
+You can see lot of connectors are listed.
+you can select jdbcSourceConnector.
+
+https://docs.confluent.io/kafka-connectors/jdbc/current/sink-connector/sink_config_options.html
+
+connection.url=jdbc:mysql://127.0.0.1:3306/inventory?verifyServerCertificate=false&useSSL=true&requireSSL=true
+
+user name:debezium
+password:dbz
+mode:bulk
+
+after giving click next button:
+
+{
+  "name": "JdbcSourceConnectorConnector_0",
+  "config": {
+    "name": "JdbcSourceConnectorConnector_0",
+    "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "connection.url": "jdbc:mysql://127.0.0.1:3306/inventory?verifyServerCertificate=false&useSSL=true&requireSSL=true",
+    "connection.user": "debezium",
+    "connection.password": "***",
+    "mode": "bulk"
+  }
+}
+
+click lanuch button
+
+after few secs, you can see 
+jdbcsource connector is running.
+
+Select Topics:
+ you can see all tables are now in topics
+
+select customers topic
+
+Click messages:
+ see 
+messages are listed
+
+open mysql terminal 
+ UPDATE customers SET first_name='subramanian murugan' WHERE id=1004;
+
+See the changes in the topics.
+

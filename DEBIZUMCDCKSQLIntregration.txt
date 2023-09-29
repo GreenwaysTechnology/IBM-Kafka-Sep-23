@@ -1,0 +1,5 @@
+https://debezium.io/blog/2018/05/24/querying-debezium-change-data-eEvents-with-ksql/
+https://github.com/debezium/debezium-examples/blob/main/ksql/README.md
+
+
+https://docs.ksqldb.io/en/latest/tutorials/materialized/#start-the-debezium-connector
